@@ -1,0 +1,54 @@
+name: macOS desktop smoke test
+
+on:
+  push:
+    branches:
+      - codex/macos-cloud-test
+    paths:
+      - '.github/workflows/macos-smoke.yml'
+      - 'scripts/**'
+      - '特制版/macOS/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-launch:
+    name: ${{ matrix.arch }} Mac app
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-15
+          - arch: x64
+            runner: macos-15-intel
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Check JavaScript and MQTT protocol handling
+        run: |
+          node --check '特制版/macOS/app/main.js'
+          node --check '特制版/macOS/app/mqtt.js'
+          node --check '特制版/macOS/app/preload.js'
+          node --check '特制版/macOS/app/renderer.js'
+          node '特制版/macOS/verify-mqtt.cjs'
+
+      - name: Build and verify signed app bundle
+        run: bash scripts/build_macos_app.sh '${{ matrix.arch }}'
+
+      - name: Launch app and verify pet rendering
+        run: python3 scripts/smoke_macos_app.py 'dist/奶蛙桌宠特制版-${{ matrix.arch }}.app'
+
+      - name: Upload macOS app package
+        uses: actions/upload-artifact@v7
+        with:
+          name: 奶蛙桌宠特制版-macOS-${{ matrix.arch }}
+          path: dist/奶蛙桌宠特制版-macOS-${{ matrix.arch }}.zip
+          if-no-files-found: error
+          retention-days: 14
