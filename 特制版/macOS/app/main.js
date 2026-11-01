@@ -9,6 +9,7 @@ const metadata=JSON.parse(fs.readFileSync(path.join(__dirname,'assets','metadata
 function config(){try{return /^enabled=true\s*$/im.test(fs.readFileSync(configPath,'utf8'));}catch{return false;}}
 function setEnabled(value){fs.writeFileSync(configPath,'; Local remote-control switch\nenabled='+value+'\n');sync();}
 function status(){return !enabled?'断开连接':state==='已连接'?'连接正常':['已关闭','连接中'].includes(state)?'断开连接':'连接失败';}
+function testLog(message){if(process.env.NAIWA_REMOTE_TEST==='1'){const line='NAIWA_REMOTE_TEST '+message;try{if(process.env.NAIWA_REMOTE_TEST_LOG)fs.appendFileSync(process.env.NAIWA_REMOTE_TEST_LOG,line+'\n');}catch{}console.log(line);}}
 function update(){if(tray){tray.setTitle(enabled?'远程控制：'+status():'');tray.setToolTip('奶蛙远程控制：'+status());}}
 function sync(){const next=config();if(next===enabled)return;enabled=next;if(enabled)remote.start();else remote.stop();update();}
 function settings(){dialog.showMessageBox({type:'info',title:'奶蛙远程控制设置',message:status(),detail:'启用远程控制后，奶蛙会连接网络，并允许已配对的控制端远程控制奶蛙动作',buttons:['关闭窗口','启动远控','关闭远控','移除设备配对'],defaultId:0,cancelId:0}).then(async({response})=>{try{if(response===1)setEnabled(true);if(response===2)setEnabled(false);if(response===3){setEnabled(false);await remote.remove();}}catch(e){dialog.showErrorBox('连接设置',e.message);}});}
@@ -39,9 +40,10 @@ function createPet(form=0){
 if(!app.requestSingleInstanceLock()){app.quit();}else{
  app.on('second-instance',(_,argv)=>{if(argv.includes('--connection-settings'))settings();else if(pets[0])pets[0].win.show();});
  app.whenReady().then(()=>{
-  configPath=path.join(app.isPackaged?path.resolve(process.resourcesPath,'../../..'):path.dirname(__dirname),'remote-control.ini');
+  configPath=process.env.NAIWA_REMOTE_CONFIG_PATH||path.join(app.isPackaged?path.resolve(process.resourcesPath,'../../..'):path.dirname(__dirname),'remote-control.ini');
+  testLog('CONFIG_PATH='+configPath);testLog('CONFIG_ENABLED='+config());if(process.env.NAIWA_REMOTE_TEST==='1')testLog('SAFE_STORAGE='+safeStorage.isEncryptionAvailable());
   if(!fs.existsSync(configPath))fs.writeFileSync(configPath,'enabled=false\n');
-  remote=new Remote({identityPath:path.join(app.getPath('userData'),'identity.json'),safeStorage,state:s=>{state=s;update();if(process.env.NAIWA_REMOTE_TEST==='1'){console.log('NAIWA_REMOTE_STATUS='+status());if(s==='已连接'&&!temporaryRemoteSessionTimer){const minutes=Math.max(1,Math.min(60,Number(process.env.NAIWA_REMOTE_TEST_MINUTES)||30));console.log('NAIWA_REMOTE_SESSION_MINUTES='+minutes);temporaryRemoteSessionTimer=setTimeout(async()=>{try{await remote.remove();console.log('NAIWA_REMOTE_CLEANUP=complete');}catch{console.log('NAIWA_REMOTE_CLEANUP=failed');}app.quit();},minutes*60*1000);}}},command:a=>{if(a==='laugh_split')laugh();else if(a==='reset_one')reset();else stop();},revoked:()=>setEnabled(false)});
+  remote=new Remote({identityPath:path.join(app.getPath('userData'),'identity.json'),safeStorage,state:s=>{state=s;update();if(process.env.NAIWA_REMOTE_TEST==='1'){testLog('STATUS='+status()+';RAW='+s);if(s==='已连接'&&!temporaryRemoteSessionTimer){const minutes=Math.max(1,Math.min(60,Number(process.env.NAIWA_REMOTE_TEST_MINUTES)||30));testLog('SESSION_MINUTES='+minutes);temporaryRemoteSessionTimer=setTimeout(async()=>{try{await remote.remove();testLog('CLEANUP=complete');}catch{testLog('CLEANUP=failed');}app.quit();},minutes*60*1000);}}},command:a=>{if(a==='laugh_split')laugh();else if(a==='reset_one')reset();else stop();},revoked:()=>setEnabled(false)});
   tray=new Tray(nativeImage.createFromPath(path.join(__dirname,'assets','forms','gentle.png')).resize({width:20,height:20}));tray.on('click',settings);update();
   Menu.setApplicationMenu(Menu.buildFromTemplate([{label:'奶蛙',submenu:[{label:'连接设置',click:settings},{label:'恢复为一只',click:reset},{role:'quit',label:'退出'}]}]));
   createPet();sync();setInterval(sync,1000);if(process.argv.includes('--connection-settings'))settings();app.dock.hide();

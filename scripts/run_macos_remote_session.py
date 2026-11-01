@@ -5,6 +5,7 @@ import os
 import queue
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -46,6 +47,10 @@ def main() -> int:
     env = os.environ.copy()
     env["NAIWA_REMOTE_TEST"] = "1"
     env["NAIWA_REMOTE_TEST_MINUTES"] = str(duration)
+    status_log = Path(env.get("RUNNER_TEMP", tempfile.gettempdir())) / "naiwa-remote-status.log"
+    status_log.unlink(missing_ok=True)
+    env["NAIWA_REMOTE_TEST_LOG"] = str(status_log)
+    env["NAIWA_REMOTE_CONFIG_PATH"] = str(app.parent / "remote-control.ini")
     process = subprocess.Popen(
         [str(executable)],
         stdout=subprocess.PIPE,
@@ -61,7 +66,8 @@ def main() -> int:
     def read_output() -> None:
         assert process.stdout is not None
         for line in process.stdout:
-            lines.put(line)
+            if not line.startswith("NAIWA_REMOTE_TEST "):
+                lines.put(line)
         lines.put(None)
 
     threading.Thread(target=read_output, daemon=True).start()
@@ -69,10 +75,32 @@ def main() -> int:
     def print_line(line: str) -> None:
         print(line, end="", flush=True)
 
+    seen_status_lines = 0
+
+    def read_status_log() -> bool:
+        nonlocal seen_status_lines
+        try:
+            contents = status_log.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            return False
+        status_lines = contents.splitlines()
+        if contents and not contents.endswith("\n"):
+            status_lines = status_lines[:-1]
+        connected_now = False
+        for line in status_lines[seen_status_lines:]:
+            print(line, flush=True)
+            if "STATUS=连接正常;" in line:
+                connected_now = True
+        seen_status_lines = len(status_lines)
+        return connected_now
+
     print("Starting the Mac pet with remote control enabled.", flush=True)
     connected = False
     connect_deadline = time.monotonic() + 90
     while time.monotonic() < connect_deadline and process.poll() is None:
+        connected = read_status_log() or connected
+        if connected:
+            break
         try:
             line = lines.get(timeout=0.5)
         except queue.Empty:
@@ -92,6 +120,7 @@ def main() -> int:
     print(f"Remote Mac pet is online for up to {duration} minutes.", flush=True)
     session_deadline = time.monotonic() + duration * 60 + 120
     while process.poll() is None and time.monotonic() < session_deadline:
+        read_status_log()
         try:
             line = lines.get(timeout=0.5)
         except queue.Empty:

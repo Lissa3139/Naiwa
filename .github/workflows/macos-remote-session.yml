@@ -28,7 +28,7 @@ jobs:
       - name: Build arm64 Mac app
         run: bash scripts/build_macos_app.sh arm64
 
-      - name: Enable remote control and keep the pet online for 30 minutes
+      - name: Enable remote control, report connection state, and keep the pet online for 30 minutes
         run: |
           printf 'enabled=true\n' > dist/remote-control.ini
           python3 scripts/run_macos_remote_session.py 'dist/奶蛙桌宠特制版-arm64.app' 30
