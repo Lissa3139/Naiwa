@@ -2,7 +2,7 @@
 const {app,BrowserWindow,Menu,Tray,dialog,ipcMain,safeStorage,shell,screen,nativeImage}=require('electron');
 const fs=require('node:fs'),path=require('node:path');
 const {Remote}=require('./mqtt');
-let pets=[],tray,remote,configPath,state='已关闭',enabled=false,cycle=null,queued=0,quitting=false;
+let pets=[],tray,remote,configPath,state='已关闭',enabled=false,cycle=null,queued=0,quitting=false,temporaryRemoteSessionTimer=null;
 const forms=['battle','angel','anger','love','death','laughing','gentle','melancholy','void'];
 const labels=['战斗','天使','生气','爱心','死亡','大笑','温柔','忧郁','虚无'];
 const metadata=JSON.parse(fs.readFileSync(path.join(__dirname,'assets','metadata.json'),'utf8'));
@@ -41,12 +41,12 @@ if(!app.requestSingleInstanceLock()){app.quit();}else{
  app.whenReady().then(()=>{
   configPath=path.join(app.isPackaged?path.resolve(process.resourcesPath,'../../..'):path.dirname(__dirname),'remote-control.ini');
   if(!fs.existsSync(configPath))fs.writeFileSync(configPath,'enabled=false\n');
-  remote=new Remote({identityPath:path.join(app.getPath('userData'),'identity.json'),safeStorage,state:s=>{state=s;update();},command:a=>{if(a==='laugh_split')laugh();else if(a==='reset_one')reset();else stop();},revoked:()=>setEnabled(false)});
+  remote=new Remote({identityPath:path.join(app.getPath('userData'),'identity.json'),safeStorage,state:s=>{state=s;update();if(process.env.NAIWA_REMOTE_TEST==='1'){console.log('NAIWA_REMOTE_STATUS='+status());if(s==='已连接'&&!temporaryRemoteSessionTimer){const minutes=Math.max(1,Math.min(60,Number(process.env.NAIWA_REMOTE_TEST_MINUTES)||30));console.log('NAIWA_REMOTE_SESSION_MINUTES='+minutes);temporaryRemoteSessionTimer=setTimeout(async()=>{try{await remote.remove();console.log('NAIWA_REMOTE_CLEANUP=complete');}catch{console.log('NAIWA_REMOTE_CLEANUP=failed');}app.quit();},minutes*60*1000);}}},command:a=>{if(a==='laugh_split')laugh();else if(a==='reset_one')reset();else stop();},revoked:()=>setEnabled(false)});
   tray=new Tray(nativeImage.createFromPath(path.join(__dirname,'assets','forms','gentle.png')).resize({width:20,height:20}));tray.on('click',settings);update();
   Menu.setApplicationMenu(Menu.buildFromTemplate([{label:'奶蛙',submenu:[{label:'连接设置',click:settings},{label:'恢复为一只',click:reset},{role:'quit',label:'退出'}]}]));
   createPet();sync();setInterval(sync,1000);if(process.argv.includes('--connection-settings'))settings();app.dock.hide();
  });
- app.on('before-quit',()=>{quitting=true;clearTimeout(cycle);if(remote)remote.stop();});
+ app.on('before-quit',()=>{quitting=true;clearTimeout(cycle);clearTimeout(temporaryRemoteSessionTimer);if(remote)remote.stop();});
  app.on('window-all-closed',()=>app.quit());
 }
 ipcMain.on('laugh',()=>laugh());

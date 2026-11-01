@@ -1,0 +1,34 @@
+name: temporary macOS remote session
+
+on:
+  push:
+    branches:
+      - codex/macos-cloud-test
+    paths:
+      - '.github/workflows/macos-remote-session.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  remote-session:
+    name: Temporary Mac remote pet
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Check JavaScript and MQTT protocol handling
+        run: |
+          node --check '特制版/macOS/app/main.js'
+          node --check '特制版/macOS/app/mqtt.js'
+          node '特制版/macOS/verify-mqtt.cjs'
+
+      - name: Build arm64 Mac app
+        run: bash scripts/build_macos_app.sh arm64
+
+      - name: Enable remote control and keep the pet online for 30 minutes
+        run: |
+          printf 'enabled=true\n' > dist/remote-control.ini
+          python3 scripts/run_macos_remote_session.py 'dist/奶蛙桌宠特制版-arm64.app' 30
