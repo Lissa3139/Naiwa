@@ -10,8 +10,9 @@ if [ -e "$target" ]; then echo '目标文件夹已有奶蛙，请先退出并移
 choice="$(/usr/bin/osascript -e 'button returned of (display dialog "启用远程控制后，奶蛙会连接网络，并允许已配对的控制端远程控制奶蛙动作" with title "奶蛙安装" buttons {"取消", "仅本机使用", "启用远程控制"} default button "仅本机使用" cancel button "取消")')"
 case "$(uname -m)" in arm64) arch=arm64;; x86_64) arch=x64;; *) echo '不支持此处理器'; exit 1;; esac
 echo '正在获取 Electron 官方运行环境版本……'
-/usr/bin/curl --fail --location --retry 3 --proto '=https' --tlsv1.2 'https://api.github.com/repos/electron/electron/releases/latest' -o "$work/release.json"
-version="$(/usr/bin/plutil -extract tag_name raw -o - "$work/release.json")"
+release_url="$(/usr/bin/curl --fail --silent --show-error --location --retry 3 --proto '=https' --tlsv1.2 --output /dev/null --write-out '%{url_effective}' 'https://github.com/electron/electron/releases/latest')"
+version="${release_url%/}"
+version="${version##*/}"
 if [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then echo '无效的运行环境版本'; exit 1; fi
 archive="electron-${version}-darwin-${arch}.zip"
 base="https://github.com/electron/electron/releases/download/${version}"

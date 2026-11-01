@@ -17,18 +17,15 @@ work="$(mktemp -d "${TMPDIR:-/tmp/}naiwa-macos-build.XXXXXX")"
 trap 'rm -rf -- "$work"' EXIT
 mkdir -p "$repo_root/dist"
 
-/usr/bin/curl --fail --location --retry 3 --proto '=https' --tlsv1.2 \
-  'https://api.github.com/repos/electron/electron/releases/latest' \
-  -o "$work/release.json"
-version="$(python3 - "$work/release.json" <<'PY'
-import json, re, sys
-with open(sys.argv[1], encoding="utf-8") as stream:
-    version = json.load(stream).get("tag_name", "")
-if not re.fullmatch(r"v\d+\.\d+\.\d+", version):
-    raise SystemExit("Electron release tag was not a stable version")
-print(version)
-PY
-)"
+release_url="$(/usr/bin/curl --fail --silent --show-error --location --retry 3 \
+  --proto '=https' --tlsv1.2 --output /dev/null --write-out '%{url_effective}' \
+  'https://github.com/electron/electron/releases/latest')"
+version="${release_url%/}"
+version="${version##*/}"
+if [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "Could not resolve a stable Electron release from $release_url" >&2
+  exit 1
+fi
 
 archive="electron-${version}-darwin-${arch}.zip"
 base="https://github.com/electron/electron/releases/download/${version}"
